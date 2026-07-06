@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Dashboard · {{ society_name }}</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  .font-display { font-family: 'Fraunces', serif; }
+  .font-mono { font-family: 'JetBrains Mono', monospace; }
+  .sidebar-link { transition: background-color .15s ease; }
+  .sidebar-link:hover { background-color: rgba(255,255,255,0.08); }
+  .sidebar-link.active { background-color: rgba(201,162,75,0.18); border-left: 3px solid #C9A24B; }
+  #knowledge-textarea, #append-textarea { scrollbar-width: thin; }
+  .stat-pulse { animation: pulse-fade 1s ease; }
+  @keyframes pulse-fade { 0% { background-color: #FEF3C7; } 100% { background-color: transparent; } }
+</style>
+</head>
+<body class="min-h-screen bg-[#F5F2EA]">
+
+<div class="flex min-h-screen">
+
+  <!-- LEFT SIDEBAR -->
+  <aside class="w-64 shrink-0 bg-[#0F2A1D] text-white flex flex-col fixed h-screen">
+    <div class="px-6 py-6 border-b border-white/10">
+      <div class="flex items-center gap-3">
+        <div class="h-10 w-10 rounded-full bg-[#C9A24B] text-[#0F2A1D] font-display font-bold flex items-center justify-center">MB</div>
+        <div>
+          <p class="font-display text-sm leading-tight">Best Choice</p>
+          <p class="text-emerald-200/60 text-xs">Admin Panel</p>
+        </div>
+      </div>
+    </div>
+
+    <nav class="flex-1 py-4 px-3 space-y-1">
+      <a href="{{ url_for('admin_dashboard') }}" class="sidebar-link active flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium">
+        <span>📊</span> Dashboard
+      </a>
+      <a href="{{ url_for('index') }}" target="_blank" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-emerald-100/90">
+        <span>💬</span> Member Chatbot
+      </a>
+      <a href="#change-password" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-emerald-100/90">
+        <span>🔒</span> Change Password
+      </a>
+    </nav>
+
+    <div class="px-3 pb-6 pt-2 border-t border-white/10">
+      <p class="px-3 text-xs text-emerald-200/50 mb-2">Signed in as {{ admin_username }}</p>
+      <form method="GET" action="{{ url_for('admin_logout') }}">
+        <button type="submit" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-red-200 hover:bg-red-500/10 transition-colors">
+          <span>↪</span> Sign Out
+        </button>
+      </form>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <div class="ml-64 flex-1 p-8 max-w-6xl">
+
+    <div class="mb-6">
+      <h1 class="font-display text-2xl text-[#0F2A1D]">Knowledge Base Dashboard</h1>
+      <p class="text-gray-500 text-sm mt-1">{{ society_name }}</p>
+    </div>
+
+    <!-- FLASH MESSAGES -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="space-y-2 mb-6">
+          {% for category, message in messages %}
+            <div class="text-sm rounded-lg px-4 py-3 flex items-center justify-between {{ 'bg-red-50 text-red-700 border border-red-200' if category == 'error' else 'bg-emerald-50 text-emerald-700 border border-emerald-200' }}">
+              <span>{{ message }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <!-- PANEL 1: STATS ROW -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+      <div class="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Character Count</p>
+        <p id="stat-chars" class="font-display text-3xl text-[#0F2A1D] mt-1">{{ stats.char_count }}</p>
+        <p class="text-xs text-gray-400 mt-1">information.txt</p>
+      </div>
+      <div class="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Knowledge Paragraphs / Lines</p>
+        <p id="stat-paragraphs" class="font-display text-3xl text-[#0F2A1D] mt-1">{{ stats.paragraph_count }}</p>
+        <p class="text-xs text-gray-400 mt-1">no vector DB — full-file reads</p>
+      </div>
+      <div class="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">File Status</p>
+        <p id="stat-status" class="font-display text-3xl mt-1 {{ 'text-emerald-600' if stats.file_exists else 'text-red-600' }}">
+          {{ 'Exists' if stats.file_exists else 'Missing' }}
+        </p>
+        <p id="stat-checked" class="text-xs text-gray-400 mt-1">checked {{ stats.last_checked }}</p>
+      </div>
+    </div>
+
+    <!-- PANEL 2: EDIT KNOWLEDGE FILE -->
+    <section class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-display text-lg text-[#0F2A1D]">Edit Knowledge File</h2>
+        <span id="edit-char-counter" class="text-xs font-mono text-gray-400">{{ stats.char_count }} characters</span>
+      </div>
+      <form method="POST" action="{{ url_for('admin_save_knowledge') }}">
+        <textarea id="knowledge-textarea" name="content" rows="16"
+          class="w-full font-mono text-sm rounded-xl border border-gray-200 bg-gray-50 p-4 focus:outline-none focus:ring-2 focus:ring-[#0F2A1D] focus:border-transparent leading-relaxed"
+          oninput="document.getElementById('edit-char-counter').textContent = this.value.length + ' characters'"
+        >{{ content }}</textarea>
+        <div class="flex justify-end mt-3">
+          <button type="submit"
+            class="bg-[#0F2A1D] hover:bg-[#143823] text-white text-sm font-semibold px-6 py-2.5 rounded-lg transition-colors">
+            Save Changes
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- PANEL 3: APPEND NEW SECTION -->
+    <section class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+      <h2 class="font-display text-lg text-[#0F2A1D] mb-3">Append New Section</h2>
+      <form method="POST" action="{{ url_for('admin_append_knowledge') }}">
+        <textarea id="append-textarea" name="addition" rows="6" placeholder="Type a new section to add to the bottom of information.txt..."
+          class="w-full font-mono text-sm rounded-xl border border-gray-200 bg-gray-50 p-4 focus:outline-none focus:ring-2 focus:ring-[#0F2A1D] focus:border-transparent leading-relaxed"
+        ></textarea>
+        <div class="flex justify-end mt-3">
+          <button type="submit"
+            class="bg-[#C9A24B] hover:bg-[#b8923f] text-[#0F2A1D] text-sm font-semibold px-6 py-2.5 rounded-lg transition-colors">
+            Append Section
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- PANEL 4: CHANGE PASSWORD -->
+    <section id="change-password" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6 scroll-mt-8">
+      <h2 class="font-display text-lg text-[#0F2A1D] mb-3">Change Password</h2>
+      <form method="POST" action="{{ url_for('admin_change_password') }}" class="max-w-md space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
+          <input type="password" name="current_password" required
+            class="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#0F2A1D] focus:border-transparent">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+          <input type="password" name="new_password" required minlength="8"
+            class="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#0F2A1D] focus:border-transparent">
+          <p class="text-xs text-gray-400 mt-1">Minimum 8 characters, must differ from current password.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
+          <input type="password" name="confirm_password" required minlength="8"
+            class="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#0F2A1D] focus:border-transparent">
+        </div>
+        <button type="submit"
+          class="bg-[#0F2A1D] hover:bg-[#143823] text-white text-sm font-semibold px-6 py-2.5 rounded-lg transition-colors">
+          Update Password
+        </button>
+      </form>
+    </section>
+
+    <!-- DANGER ZONE -->
+    <section class="bg-red-50 rounded-2xl border border-red-200 p-6">
+      <h2 class="font-display text-lg text-red-700 mb-1">Danger Zone</h2>
+      <p class="text-sm text-red-600/80 mb-4">These actions cannot be undone. Proceed with care.</p>
+      <div class="flex flex-wrap gap-3">
+        <form method="POST" action="{{ url_for('admin_clear_knowledge') }}"
+          onsubmit="return confirm('This will permanently erase all contents of information.txt. Are you sure?');">
+          <button type="submit"
+            class="bg-white border border-red-300 text-red-700 hover:bg-red-100 text-sm font-semibold px-5 py-2.5 rounded-lg transition-colors">
+            Clear Knowledge File
+          </button>
+        </form>
+        <form method="POST" action="{{ url_for('admin_wipe_cache') }}"
+          onsubmit="return confirm('This will reset the system cache and clear recent query logs. Continue?');">
+          <button type="submit"
+            class="bg-white border border-red-300 text-red-700 hover:bg-red-100 text-sm font-semibold px-5 py-2.5 rounded-lg transition-colors">
+            Wipe System Cache
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <p class="text-center text-gray-400 text-xs mt-8 pb-8">
+      Stats auto-refresh every 30 seconds.
+    </p>
+  </div>
+</div>
+
+<script>
+async function refreshStats() {
+  try {
+    const res = await fetch("{{ url_for('admin_api_stats') }}");
+    if (!res.ok) return;
+    const data = await res.json();
+
+    const charsEl = document.getElementById('stat-chars');
+    const paraEl = document.getElementById('stat-paragraphs');
+    const statusEl = document.getElementById('stat-status');
+    const checkedEl = document.getElementById('stat-checked');
+
+    charsEl.textContent = data.char_count;
+    paraEl.textContent = data.paragraph_count;
+    statusEl.textContent = data.file_exists ? 'Exists' : 'Missing';
+    statusEl.className = 'font-display text-3xl mt-1 ' + (data.file_exists ? 'text-emerald-600' : 'text-red-600');
+    checkedEl.textContent = 'checked ' + data.last_checked;
+
+    [charsEl, paraEl, statusEl].forEach(el => {
+      el.classList.remove('stat-pulse');
+      void el.offsetWidth; // restart animation
+      el.classList.add('stat-pulse');
+    });
+  } catch (err) {
+    // silent fail; stats will retry on next interval
+  }
+}
+
+setInterval(refreshStats, 30000);
+</script>
+</body>
+</html>
