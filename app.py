@@ -1,21 +1,3 @@
-"""
-MOLETE (IBADAN) BEST CHOICE MULTIPURPOSE CO-OPERATIVE SOCIETY LTD
-Flask application: member-facing AI chatbot + admin knowledge-base portal.
-
-Architecture note (intentional, per spec):
-    NO chunking. NO vector database. NO embeddings.
-    Every chat request reads the entire information.txt file from disk and
-    sends it, in full, to the Groq API alongside the member's question in a
-    single completion call. Groq is instructed to read everything and reply
-    in a freshly synthesized, natural sentence -- not a copy/paste of the
-    source text.
-
-Run:
-    pip install -r requirements.txt
-    cp .env.example .env   # fill in real values
-    python app.py
-"""
-
 import os
 import functools
 from datetime import datetime
@@ -42,7 +24,20 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-me")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 
-groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+# Initialize Groq client safely. Some combinations of the `groq` SDK and
+# underlying HTTP libraries can raise unexpected exceptions during import or
+# construction. Wrap initialization so the Flask app can still start and
+# surface a clear error to the API instead of crashing the whole process.
+groq_client = None
+GROQ_CLIENT_ERROR = None
+if GROQ_API_KEY:
+    try:
+        groq_client = Groq(api_key=GROQ_API_KEY)
+    except Exception as exc:  # catch initialization-time errors
+        groq_client = None
+        GROQ_CLIENT_ERROR = str(exc)
+        # Print to stdout/stderr so deploy logs show the underlying problem.
+        print("Warning: failed to initialize Groq client:", repr(exc))
 
 SOCIETY_NAME = "MOLETE (IBADAN) BEST CHOICE MULTIPURPOSE CO-OPERATIVE SOCIETY LTD"
 
@@ -130,6 +125,14 @@ def api_chat():
         return jsonify({"error": "Please enter a question."}), 400
 
     if not groq_client:
+        # If there was an initialization error, show that to the admin in a
+        # concise form; otherwise, indicate the chatbot is not configured.
+        if GROQ_CLIENT_ERROR:
+            return jsonify({
+                "error": "The chatbot client failed to initialize. Check server logs for details.",
+                "detail": GROQ_CLIENT_ERROR,
+            }), 503
+
         return jsonify({
             "error": "The chatbot is not configured. Please set GROQ_API_KEY "
                      "in the .env file and restart the server."
